@@ -17,11 +17,9 @@ object TermuxBridge {
             intent.putExtra("com.termux.RUN_COMMAND_ARGUMENTS", intentArgs)
             intent.putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
 
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                context.startForegroundService(intent)
-            } else {
-                context.startService(intent)
-            }
+            // Since BACKGROUND is true, Termux won't start a foreground notification.
+            // Using startService prevents ForegroundServiceDidNotStartInTimeException.
+            context.startService(intent)
             Log.d(TAG, "Sent Termux intent for script: $scriptPath")
 
         } catch (e: Exception) {

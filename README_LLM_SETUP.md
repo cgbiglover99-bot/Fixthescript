@@ -12,11 +12,14 @@ pkg install clang wget git cmake make python -y
 ```
 
 ### Step 2: Download and Compile llama.cpp
-Clone the repository and compile it for Android:
+Clone the repository (wiping any broken previous installs) and compile it for Android using CMake:
 ```bash
+cd ~
+rm -rf llama.cpp
 git clone https://github.com/ggerganov/llama.cpp
 cd llama.cpp
-make -j8
+cmake -B build
+cmake --build build --config Release -j8
 ```
 
 ### Step 3: Download the "Vesper" Model
@@ -31,7 +34,7 @@ wget -O models/vesper-llama-3-8b-instruct.Q4_K_M.gguf https://huggingface.co/Nou
 The Android app is hardcoded to look for the LLM API at `http://127.0.0.1:8080`.
 Run this command to start the background inference server:
 ```bash
-./server -m models/vesper-llama-3-8b-instruct.Q4_K_M.gguf -c 2048 --host 127.0.0.1 --port 8080 -t 8 &
+./build/bin/llama-server -m models/vesper-llama-3-8b-instruct.Q4_K_M.gguf -c 2048 --host 127.0.0.1 --port 8080 -t 8 &
 ```
 
 > **Note:** The `&` at the end runs the server in the background. You can now minimize Termux, open your Android app, and chat with Vesper natively!
