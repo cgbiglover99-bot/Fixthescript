@@ -48,10 +48,14 @@ object ScriptManager {
 import sys
 import requests
 import os
+import subprocess
 
 # SCRIPT 1: vesper_research.py
 # - Function: Takes a user query, checks the Gatekeeper status, performs a 10-second timeout web scrape using DuckDuckGo HTML, strips tracking, and saves a clean text file to /sdcard/LookUpProductionStudios/Assets/.
 # - Correction Applied: Hard timeout added to prevent socket hanging on bad cellular connections.
+
+def notify_android(message):
+    subprocess.run(["am", "broadcast", "-a", "com.lookupproduction.vesper.TERMUX_CALLBACK", "--es", "message", message], check=False)
 
 def main():
     if len(sys.argv) < 3:
@@ -62,10 +66,10 @@ def main():
     status = sys.argv[2]
 
     if status.lower() != "online":
-        print("Gatekeeper is OFFLINE. Research aborted.")
+        notify_android("Gatekeeper is OFFLINE. Research aborted.")
         return
 
-    print(f"Gatekeeper ONLINE. Researching: {query}")
+    notify_android(f"Gatekeeper ONLINE. Researching: {query}")
 
     # Simulate a web scrape with 10-second timeout
     try:
@@ -84,12 +88,12 @@ def main():
         with open(output_file, "w", encoding="utf-8") as f:
             f.write(response.text[:1000]) # Saving a snippet for demonstration
 
-        print(f"Research saved to {output_file}")
+        notify_android(f"Research saved successfully.")
 
     except requests.exceptions.Timeout:
-        print("Error: Connection timed out. Cellular connection may be poor.")
+        notify_android("Connection timed out. Cellular connection may be poor.")
     except Exception as e:
-        print(f"Error during research: {e}")
+        notify_android(f"Error during research.")
 
 if __name__ == "__main__":
     main()
@@ -107,6 +111,9 @@ import glob
 # SCRIPT 2: vesper_render.py
 # - Function: Executes FFmpeg commands to take raw .mp4 files from the /Vault_Sync directory, crops them to 9:16 aspect ratio (for shorts), injects an audio track from /Assets/Music, and outputs the final file to /Output.
 # - Correction Applied: Wrapped in a Try/Except block to silently skip corrupted media files instead of crashing the thread.
+
+def notify_android(message):
+    subprocess.run(["am", "broadcast", "-a", "com.lookupproduction.vesper.TERMUX_CALLBACK", "--es", "message", message], check=False)
 
 def main():
     vault_dir = "/sdcard/LookUpProductionStudios/Vault_Sync"
@@ -128,7 +135,7 @@ def main():
         filename = os.path.basename(input_file)
         output_file = os.path.join(output_dir, f"rendered_{filename}")
 
-        print(f"Processing: {filename}")
+        notify_android(f"Rendering: {filename}")
 
         # FFmpeg command to crop to 9:16 (assuming 1080p input: crop=607:1080:656:0)
         # This is a generic crop, adjust parameters as needed based on source resolution.
@@ -145,14 +152,13 @@ def main():
         try:
             # Run FFmpeg, wait for it to complete
             process = subprocess.run(ffmpeg_cmd, capture_output=True, text=True, check=True)
-            print(f"Successfully rendered: {output_file}")
+            notify_android("Render complete.")
         except subprocess.CalledProcessError as e:
             # Silently skip corrupted or failing media files
-            print(f"Skipping {filename} due to FFmpeg error.")
-            # For debugging, you could log e.stderr to a file here
+            notify_android(f"Skipped {filename} due to error.")
             pass
         except FileNotFoundError:
-             print("Error: FFmpeg not found in PATH. Make sure it is installed in Termux.")
+             notify_android("FFmpeg not installed.")
 
 if __name__ == "__main__":
     main()
@@ -165,10 +171,14 @@ if __name__ == "__main__":
             legalScript.writeText("""
 import sys
 import os
+import subprocess
 from datetime import datetime
 
 # SCRIPT 3: vesper_legal.py
 # - Function: Generates a local text-based Model Release Form based on talent name and date, saving it to the /Legal directory. Checks for local 18+ compliance timestamps.
+
+def notify_android(message):
+    subprocess.run(["am", "broadcast", "-a", "com.lookupproduction.vesper.TERMUX_CALLBACK", "--es", "message", message], check=False)
 
 def main():
     if len(sys.argv) < 3:
@@ -186,10 +196,10 @@ def main():
         age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
 
         if age < 18:
-            print(f"Warning: {talent_name} is under 18 (Age: {age}). Guardian signature required.")
+            notify_android(f"Warning: Minor detected. Guardian signature required.")
             compliance_status = "MINOR - REQUIRES GUARDIAN"
         else:
-            print(f"Success: {talent_name} is 18 or older (Age: {age}).")
+            notify_android(f"Success: Adult compliance verified.")
             compliance_status = "ADULT - COMPLIANT"
 
         legal_dir = "/sdcard/LookUpProductionStudios/Legal"
@@ -206,10 +216,10 @@ def main():
             f.write("I hereby grant Look Up Production Studios the absolute and irrevocable right and permission...\n")
             f.write("[Standard Legal Boilerplate Here]\n")
 
-        print(f"Legal form generated at: {filename}")
+        notify_android("Legal form generated.")
 
     except ValueError:
-        print("Error: Invalid date format. Use YYYY-MM-DD.")
+        notify_android("Invalid date format. Use YYYY-MM-DD.")
 
 if __name__ == "__main__":
     main()
