@@ -24,6 +24,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
 
@@ -101,8 +103,8 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                         termuxState = incomingMessage,
                         onManageStorageClick = { requestManageStoragePermission() },
                         onStartMicClick = { startSpeechToText() },
-                        onSendTermuxCommand = { command, isOnline ->
-                            handleTermuxCommand(command, isOnline)
+                        onSendPrompt = { prompt, isOnline, history ->
+                            processPrompt(prompt, isOnline, history)
                         }
                     )
                 }
@@ -151,15 +153,29 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         tts?.speak(text, TextToSpeech.QUEUE_FLUSH, null, null)
     }
 
-    private fun handleTermuxCommand(command: String, isOnline: Boolean) {
-        val parts = command.trim().split(" ", limit = 2)
-        val action = parts.getOrNull(0)?.lowercase() ?: return
-        val query = parts.getOrNull(1) ?: ""
+    private fun processPrompt(prompt: String, isOnline: Boolean, history: List<String>) {
+        lifecycleScope.launch {
+            val response = LlmEngine.queryLlm(prompt, isOnline, history)
 
+            when (response) {
+                is LlmResponse.Text -> {
+                    // Send text to UI via broadcast hack for simplicity (to reuse termuxState variable)
+                    sendBroadcast(Intent("com.lookupproduction.vesper.TERMUX_CALLBACK").apply {
+                        putExtra("message", response.message)
+                    })
+                }
+                is LlmResponse.ToolCall -> {
+                    handleTermuxTool(response.toolName, response.args, isOnline)
+                }
+            }
+        }
+    }
+
+    private fun handleTermuxTool(action: String, query: String, isOnline: Boolean) {
         var scriptName: String? = null
         var args: Array<String> = emptyArray()
 
-        when (action) {
+        when (action.lowercase()) {
             "research" -> {
                 scriptName = "vesper_research.py"
                 args = arrayOf(query, if (isOnline) "online" else "offline")
@@ -168,11 +184,11 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 val intent = Intent(this, RenderService::class.java)
                 startService(intent)
                 scriptName = "vesper_render.py"
-                args = arrayOf()
+                args = emptyArray()
             }
             "legal" -> {
                 scriptName = "vesper_legal.py"
-                // Expecting query format: "John Doe 1990-01-01"
+                // Attempt simple extraction: "John Doe 1990-01-01"
                 val legalParts = query.split(Regex("(?=\\d{4}-\\d{2}-\\d{2})"), limit = 2)
                 val name = legalParts.getOrNull(0)?.trim() ?: "Unknown"
                 val dob = legalParts.getOrNull(1)?.trim() ?: "1900-01-01"
@@ -183,9 +199,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
         scriptName?.let {
             val scriptPath = "/sdcard/LookUpProductionStudios/Scripts/$it"
             TermuxBridge.executePythonScript(this, scriptPath, args)
-            speak("Executing $action command.")
+            speak("Executing $action tool.")
         } ?: run {
-            speak("Command not recognized. Please use research, render, or legal.")
+            speak("LLM attempted to call unknown tool: $action.")
         }
     }
 }
@@ -197,7 +213,7 @@ fun VesperUI(
     termuxState: MutableState<String>,
     onManageStorageClick: () -> Unit,
     onStartMicClick: () -> Unit,
-    onSendTermuxCommand: (String, Boolean) -> Unit
+    onSendPrompt: (String, Boolean, List<String>) -> Unit
 ) {
     var isGatekeeperOnline by remember { mutableStateOf(false) }
     var inputText by remember { mutableStateOf("") }
@@ -286,9 +302,10 @@ fun VesperUI(
             Button(onClick = {
                 if (inputText.isNotBlank()) {
                     chatHistory = chatHistory + "You: $inputText"
-                    onSendTermuxCommand(inputText, isGatekeeperOnline)
-                    chatHistory = chatHistory + "Vesper: Processing command..."
+                    val currentInput = inputText
                     inputText = ""
+                    chatHistory = chatHistory + "System: Thinking..."
+                    onSendPrompt(currentInput, isGatekeeperOnline, chatHistory)
                 }
             }) {
                 Text("Send")
