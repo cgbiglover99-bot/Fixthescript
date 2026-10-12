@@ -25,6 +25,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.IntentFilter
 import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
@@ -85,10 +86,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         // Setup environment only if permission is already granted, otherwise do it later
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
-            try {
-                ScriptManager.setupEnvironment(this)
-            } catch (e: Exception) {
-                // Ignore initial setup failure, retry on button click
+            lifecycleScope.launch(Dispatchers.IO) {
+                try {
+                    ScriptManager.setupEnvironment(this@MainActivity)
+                } catch (e: Exception) {
+                    // Ignore initial setup failure, retry on button click
+                }
             }
         }
 
@@ -127,10 +130,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
                 }
             } else {
                 // Already granted, initialize environment
-                try {
-                    ScriptManager.setupEnvironment(this)
-                } catch (e: Exception) {
-                    // Log or show error
+                lifecycleScope.launch(Dispatchers.IO) {
+                    try {
+                        ScriptManager.setupEnvironment(this@MainActivity)
+                    } catch (e: Exception) {
+                        // Log or show error
+                    }
                 }
             }
         }
