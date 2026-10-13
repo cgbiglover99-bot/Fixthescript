@@ -13,7 +13,7 @@ object ScriptManager {
     val baseDir: File
         get() = File(Environment.getExternalStorageDirectory(), BASE_DIR_NAME)
 
-    fun setupEnvironment(context: Context) {
+    fun setupEnvironment() {
         createDirectories()
         writeScripts()
     }
