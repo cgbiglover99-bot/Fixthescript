@@ -77,11 +77,9 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         // Register receiver for Termux callbacks
         val filter = IntentFilter("com.lookupproduction.vesper.TERMUX_CALLBACK")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(termuxReceiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(termuxReceiver, filter)
-        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this, termuxReceiver, filter, androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
 
         // Setup environment only if permission is already granted, otherwise do it later
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
@@ -217,7 +215,9 @@ fun VesperUI(
 ) {
     var isGatekeeperOnline by remember { mutableStateOf(false) }
     var inputText by remember { mutableStateOf("") }
-    var chatHistory by remember { mutableStateOf(listOf<String>()) }
+    // Optimization: Use mutableStateListOf for O(1) list appends instead of mutableStateOf(listOf())
+    // which requires full list copying O(N) on every message.
+    val chatHistory = remember { mutableStateListOf<String>() }
 
     // Automatically populate the text field if STT returns a result
     LaunchedEffect(sttState.value) {
@@ -230,7 +230,7 @@ fun VesperUI(
     // Append incoming termux messages to the chat history
     LaunchedEffect(termuxState.value) {
         if (termuxState.value.isNotBlank()) {
-            chatHistory = chatHistory + "System: ${termuxState.value}"
+            chatHistory.add("System: ${termuxState.value}")
             termuxState.value = ""
         }
     }
@@ -301,11 +301,11 @@ fun VesperUI(
             Spacer(modifier = Modifier.width(8.dp))
             Button(onClick = {
                 if (inputText.isNotBlank()) {
-                    chatHistory = chatHistory + "You: $inputText"
+                    chatHistory.add("You: $inputText")
                     val currentInput = inputText
                     inputText = ""
-                    chatHistory = chatHistory + "System: Thinking..."
-                    onSendPrompt(currentInput, isGatekeeperOnline, chatHistory)
+                    chatHistory.add("System: Thinking...")
+                    onSendPrompt(currentInput, isGatekeeperOnline, chatHistory.toList())
                 }
             }) {
                 Text("Send")
