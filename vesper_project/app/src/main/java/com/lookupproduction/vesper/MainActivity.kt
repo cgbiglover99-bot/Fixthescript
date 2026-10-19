@@ -7,6 +7,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.core.content.ContextCompat
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -77,11 +78,7 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         // Register receiver for Termux callbacks
         val filter = IntentFilter("com.lookupproduction.vesper.TERMUX_CALLBACK")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(termuxReceiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(termuxReceiver, filter)
-        }
+        ContextCompat.registerReceiver(this, termuxReceiver, filter, ContextCompat.RECEIVER_EXPORTED)
 
         // Setup environment only if permission is already granted, otherwise do it later
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
@@ -216,27 +213,20 @@ fun VesperUI(
     onSendPrompt: (String, Boolean, List<String>) -> Unit
 ) {
     var isGatekeeperOnline by remember { mutableStateOf(false) }
-    var inputText by remember { mutableStateOf("") }
-    var chatHistory by remember { mutableStateOf(listOf<String>()) }
 
-    // Automatically populate the text field if STT returns a result
-    LaunchedEffect(sttState.value) {
-        if (sttState.value.isNotBlank()) {
-            inputText = sttState.value
-            sttState.value = "" // clear it after copying
-        }
-    }
+    // Performance optimization: Using mutableStateListOf instead of mutableStateOf(listOf())
+    // Expected impact: Provides O(1) appends and allows Compose to optimize list rendering
+    // without re-creating the entire list object on every new message.
+    val chatHistory = remember { mutableStateListOf<String>() }
 
     // Append incoming termux messages to the chat history
     LaunchedEffect(termuxState.value) {
         if (termuxState.value.isNotBlank()) {
-            chatHistory = chatHistory + "System: ${termuxState.value}"
+            chatHistory.add("System: ${termuxState.value}")
             termuxState.value = ""
         }
     }
 
-    // System Prompt placeholder context
-    val systemPrompt = "You are Vesper, the Specialized Production Arm for Look Up Production Studios. You are an expert in private independent film pacing, model release legalities, and high-intensity voiceover generation. Output formatting must cater to mobile shorts (9:16) or feature scenes."
 
     Column(modifier = Modifier.fillMaxSize().padding(16.dp)) {
 
@@ -279,37 +269,68 @@ fun VesperUI(
         }
 
         // Input Area
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = inputText,
-                onValueChange = { inputText = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Command Vesper...") }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
+        ChatInputArea(
+            sttState = sttState,
+            isGatekeeperOnline = isGatekeeperOnline,
+            chatHistory = chatHistory,
+            onStartMicClick = onStartMicClick,
+            onSendPrompt = onSendPrompt
+        )
+    }
+}
 
-            // Microphone Button
-            Button(onClick = {
-                onStartMicClick()
-            }) {
-                Text("🎤")
-            }
+// Performance optimization: Isolated TextField into its own Composable (ChatInputArea).
+// Expected impact: Prevents full-screen recompositions (including the chat history LazyColumn)
+// on every keystroke in the TextField, significantly improving typing responsiveness.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun ChatInputArea(
+    sttState: MutableState<String>,
+    isGatekeeperOnline: Boolean,
+    chatHistory: androidx.compose.runtime.snapshots.SnapshotStateList<String>,
+    onStartMicClick: () -> Unit,
+    onSendPrompt: (String, Boolean, List<String>) -> Unit
+) {
+    var inputText by remember { mutableStateOf("") }
 
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = {
-                if (inputText.isNotBlank()) {
-                    chatHistory = chatHistory + "You: $inputText"
-                    val currentInput = inputText
-                    inputText = ""
-                    chatHistory = chatHistory + "System: Thinking..."
-                    onSendPrompt(currentInput, isGatekeeperOnline, chatHistory)
-                }
-            }) {
-                Text("Send")
+    // Automatically populate the text field if STT returns a result
+    LaunchedEffect(sttState.value) {
+        if (sttState.value.isNotBlank()) {
+            inputText = sttState.value
+            sttState.value = "" // clear it after copying
+        }
+    }
+
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextField(
+            value = inputText,
+            onValueChange = { inputText = it },
+            modifier = Modifier.weight(1f),
+            placeholder = { Text("Command Vesper...") }
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Microphone Button
+        Button(onClick = {
+            onStartMicClick()
+        }) {
+            Text("🎤")
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+        Button(onClick = {
+            if (inputText.isNotBlank()) {
+                chatHistory.add("You: $inputText")
+                val currentInput = inputText
+                inputText = ""
+                chatHistory.add("System: Thinking...")
+                onSendPrompt(currentInput, isGatekeeperOnline, chatHistory.toList())
             }
+        }) {
+            Text("Send")
         }
     }
 }
