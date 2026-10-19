@@ -1,0 +1,3 @@
+## 2024-10-19 - Jetpack Compose Recomposition & List Bottlenecks
+**Learning:** In this codebase's architecture, tying high-frequency state updates (like `inputText` on every keystroke) directly into the root `VesperUI` composable triggers full-screen recompositions. Additionally, using `mutableStateOf(listOf())` for chat history results in O(N) list appends, which scales poorly as the chat history grows.
+**Action:** Always isolate high-frequency state updates into separate composables (e.g., extracting input fields) to localize recomposition. Use `mutableStateListOf` instead of `mutableStateOf(listOf())` for O(1) list appends when managing dynamic collections like chat histories.
