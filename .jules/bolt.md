@@ -1,0 +1,3 @@
+## 2024-05-14 - Jetpack Compose State Performance
+**Learning:** For Jetpack Compose performance in this codebase, always isolate high-frequency state updates (like text inputs) into separate composables to avoid full-screen recompositions. Additionally, when managing dynamic lists of UI elements (like chat history), using `mutableStateOf(listOf())` leads to O(n) list appends because a new list copy is created every time.
+**Action:** Always isolate text inputs into separate composables and use `mutableStateListOf` instead of `mutableStateOf(listOf())` for O(1) list appends when building Compose UIs.
