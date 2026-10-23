@@ -1,0 +1,3 @@
+## 2024-05-24 - [Compose Performance Optimization]
+**Learning:** High-frequency state updates in Jetpack Compose (like text inputs) can cause full-screen recompositions if not isolated into separate composables. Additionally, using `mutableStateOf(listOf())` for collections causes O(N) complexity for appends, creating a bottleneck.
+**Action:** Always isolate text input fields and their immediate state into separate composable functions to restrict recomposition scope. For dynamic lists, always use `mutableStateListOf` to ensure O(1) list appends.
