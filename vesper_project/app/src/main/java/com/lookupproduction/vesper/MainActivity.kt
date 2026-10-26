@@ -77,11 +77,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         // Register receiver for Termux callbacks
         val filter = IntentFilter("com.lookupproduction.vesper.TERMUX_CALLBACK")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(termuxReceiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(termuxReceiver, filter)
-        }
+        androidx.core.content.ContextCompat.registerReceiver(
+            this,
+            termuxReceiver,
+            filter,
+            androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+        )
 
         // Setup environment only if permission is already granted, otherwise do it later
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
@@ -217,7 +218,9 @@ fun VesperUI(
 ) {
     var isGatekeeperOnline by remember { mutableStateOf(false) }
     var inputText by remember { mutableStateOf("") }
-    var chatHistory by remember { mutableStateOf(listOf<String>()) }
+
+    // ⚡ Bolt: Use mutableStateListOf for O(1) list appends instead of recreating the list
+    val chatHistory = remember { mutableStateListOf<String>() }
 
     // Automatically populate the text field if STT returns a result
     LaunchedEffect(sttState.value) {
@@ -230,7 +233,7 @@ fun VesperUI(
     // Append incoming termux messages to the chat history
     LaunchedEffect(termuxState.value) {
         if (termuxState.value.isNotBlank()) {
-            chatHistory = chatHistory + "System: ${termuxState.value}"
+            chatHistory.add("System: ${termuxState.value}")
             termuxState.value = ""
         }
     }
@@ -278,38 +281,58 @@ fun VesperUI(
             }
         }
 
-        // Input Area
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = inputText,
-                onValueChange = { inputText = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Command Vesper...") }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Microphone Button
-            Button(onClick = {
-                onStartMicClick()
-            }) {
-                Text("🎤")
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = {
+        // Extracted Input Area for better performance (prevents full screen recomposition on typing)
+        VesperInputArea(
+            inputText = inputText,
+            onInputTextChange = { inputText = it },
+            onStartMicClick = onStartMicClick,
+            onSendClick = {
                 if (inputText.isNotBlank()) {
-                    chatHistory = chatHistory + "You: $inputText"
+                    chatHistory.add("You: $inputText")
                     val currentInput = inputText
                     inputText = ""
-                    chatHistory = chatHistory + "System: Thinking..."
-                    onSendPrompt(currentInput, isGatekeeperOnline, chatHistory)
+                    chatHistory.add("System: Thinking...")
+                    // Pass a snapshot to avoid ConcurrentModificationExceptions
+                    onSendPrompt(currentInput, isGatekeeperOnline, chatHistory.toList())
                 }
-            }) {
-                Text("Send")
             }
+        )
+    }
+}
+
+/**
+ * ⚡ Bolt: Extracted input area to avoid full-screen recomposition on every keypress.
+ * By isolating high-frequency state updates like text typing into its own composable (or passing state down),
+ * we prevent the rest of the VesperUI (LazyColumn, Buttons, etc.) from recomposing when the user types.
+ */
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun VesperInputArea(
+    inputText: String,
+    onInputTextChange: (String) -> Unit,
+    onStartMicClick: () -> Unit,
+    onSendClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextField(
+            value = inputText,
+            onValueChange = onInputTextChange,
+            modifier = Modifier.weight(1f),
+            placeholder = { Text("Command Vesper...") }
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Microphone Button
+        Button(onClick = onStartMicClick) {
+            Text("🎤")
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+        Button(onClick = onSendClick) {
+            Text("Send")
         }
     }
 }
