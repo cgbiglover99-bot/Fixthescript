@@ -28,6 +28,7 @@ import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 import java.io.File
 import java.util.Locale
+import androidx.core.content.ContextCompat
 
 class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
@@ -77,11 +78,12 @@ class MainActivity : ComponentActivity(), TextToSpeech.OnInitListener {
 
         // Register receiver for Termux callbacks
         val filter = IntentFilter("com.lookupproduction.vesper.TERMUX_CALLBACK")
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(termuxReceiver, filter, Context.RECEIVER_EXPORTED)
-        } else {
-            registerReceiver(termuxReceiver, filter)
-        }
+        ContextCompat.registerReceiver(
+            this,
+            termuxReceiver,
+            filter,
+            ContextCompat.RECEIVER_EXPORTED
+        )
 
         // Setup environment only if permission is already granted, otherwise do it later
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R && Environment.isExternalStorageManager()) {
@@ -217,7 +219,8 @@ fun VesperUI(
 ) {
     var isGatekeeperOnline by remember { mutableStateOf(false) }
     var inputText by remember { mutableStateOf("") }
-    var chatHistory by remember { mutableStateOf(listOf<String>()) }
+    // Performance improvement: Use mutableStateListOf for O(1) list appends
+    val chatHistory = remember { mutableStateListOf<String>() }
 
     // Automatically populate the text field if STT returns a result
     LaunchedEffect(sttState.value) {
@@ -230,7 +233,7 @@ fun VesperUI(
     // Append incoming termux messages to the chat history
     LaunchedEffect(termuxState.value) {
         if (termuxState.value.isNotBlank()) {
-            chatHistory = chatHistory + "System: ${termuxState.value}"
+            chatHistory.add("System: ${termuxState.value}")
             termuxState.value = ""
         }
     }
@@ -278,38 +281,53 @@ fun VesperUI(
             }
         }
 
-        // Input Area
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            TextField(
-                value = inputText,
-                onValueChange = { inputText = it },
-                modifier = Modifier.weight(1f),
-                placeholder = { Text("Command Vesper...") }
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Microphone Button
-            Button(onClick = {
-                onStartMicClick()
-            }) {
-                Text("🎤")
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-            Button(onClick = {
+        // Input Area - Extracted to separate composable to avoid full-screen recompositions
+        VesperInputArea(
+            inputText = inputText,
+            onInputChange = { inputText = it },
+            onStartMicClick = onStartMicClick,
+            onSendClick = {
                 if (inputText.isNotBlank()) {
-                    chatHistory = chatHistory + "You: $inputText"
+                    chatHistory.add("You: $inputText")
                     val currentInput = inputText
                     inputText = ""
-                    chatHistory = chatHistory + "System: Thinking..."
-                    onSendPrompt(currentInput, isGatekeeperOnline, chatHistory)
+                    chatHistory.add("System: Thinking...")
+                    // Pass a snapshot to avoid ConcurrentModificationException
+                    onSendPrompt(currentInput, isGatekeeperOnline, chatHistory.toList())
                 }
-            }) {
-                Text("Send")
             }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun VesperInputArea(
+    inputText: String,
+    onInputChange: (String) -> Unit,
+    onStartMicClick: () -> Unit,
+    onSendClick: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        TextField(
+            value = inputText,
+            onValueChange = onInputChange,
+            modifier = Modifier.weight(1f),
+            placeholder = { Text("Command Vesper...") }
+        )
+        Spacer(modifier = Modifier.width(8.dp))
+
+        // Microphone Button
+        Button(onClick = onStartMicClick) {
+            Text("🎤")
+        }
+
+        Spacer(modifier = Modifier.width(8.dp))
+        Button(onClick = onSendClick) {
+            Text("Send")
         }
     }
 }
