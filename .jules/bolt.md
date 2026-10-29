@@ -1,0 +1,4 @@
+
+## 2024-05-19 - Compose Recomposition & State List Append Optimization
+**Learning:** In Jetpack Compose, having high-frequency updates like text input (`inputText`) in the same Composable as a large complex layout or list causes full-screen recompositions on every keystroke, which is a significant performance bottleneck. Furthermore, using `var list by mutableStateOf(listOf())` and appending via `list = list + newItem` causes O(n) reallocation on every append, whereas `mutableStateListOf()` allows O(1) appends.
+**Action:** Isolate high-frequency state updates (like text inputs) into separate, smaller composables to localize recomposition. Use `mutableStateListOf` for lists that grow incrementally, and pass `.toList()` to async backend functions to prevent `ConcurrentModificationExceptions`.
