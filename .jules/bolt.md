@@ -1,0 +1,3 @@
+## 2024-05-18 - [State Management Optimization in Jetpack Compose]
+**Learning:** In Jetpack Compose, using `var list by remember { mutableStateOf(listOf<T>()) }` and appending with `list = list + item` causes O(n) list copying on every append, degrading performance for frequently updated lists like chat history. Additionally, when passing mutable state lists to asynchronous functions, `ConcurrentModificationExceptions` can occur.
+**Action:** Use `val list = remember { mutableStateListOf<T>() }` for O(1) list appends, and always pass a snapshot using `.toList()` when sending the list to asynchronous backend functions or callbacks.
