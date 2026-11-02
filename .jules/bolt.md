@@ -1,0 +1,3 @@
+## 2023-10-27 - Jetpack Compose Recomposition & List State Isolation
+**Learning:** High-frequency state updates like text inputs in the root UI compose function will cause the entire screen (including complex chat lists) to recompose, causing lag. Also, passing `mutableStateOf(listOf())` for a growing chat history uses O(N) append, and passing `mutableStateListOf` to asynchronous callbacks can trigger `ConcurrentModificationExceptions`.
+**Action:** Isolate high-frequency text inputs into their own Composable components (e.g. `ChatInputArea`). Use `mutableStateListOf` for O(1) appending in chat histories, but always call `.toList()` to create a snapshot when passing to async Coroutines.
